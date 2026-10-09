@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HTML Banner Ad to GIF Studio</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    }
+
+    body {
+      background-color: #0b0f19;
+      color: #f1f5f9;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    header {
+      background-color: #111827;
+      border-bottom: 1px solid #1f2937;
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 16px;
+      color: #38bdf8;
+    }
+
+    .logo svg {
+      width: 24px;
+      height: 24px;
+      fill: #38bdf8;
+    }
+
+    .container {
+      display: grid;
+      grid-template-columns: minmax(420px, 36%) 1fr;
+      flex: 1;
+      height: calc(100vh - 57px);
+      overflow: hidden;
+    }
+
+    .sidebar {
+      background-color: #0f172a;
+      border-right: 1px solid #1e293b;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      overflow-y: auto;
+      min-width: 0;
+    }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #94a3b8;
+      margin-bottom: 8px;
+    }
+
+    .dropzone {
+      border: 2px dashed #334155;
+      border-radius: 8px;
+      padding: 20px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      background: #1e293b40;
+      word-break: break-word;
+      overflow: hidden;
+    }
+
+    .dropzone:hover, .dropzone.dragover {
+      border-color: #38bdf8;
+      background: #38bdf810;
+    }
+
+    .dropzone-icon {
+      font-size: 26px;
+      margin-bottom: 6px;
+    }
+
+    .dropzone-text {
+      font-size: 13px;
+      font-weight: 600;
+      color: #cbd5e1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+      display: block;
+      padding: 0 4px;
+    }
+
+    .dropzone-sub {
+      font-size: 11px;
+      color: #64748b;
+      margin-top: 4px;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form-group.full {
+      grid-column: span 2;
+    }
+
+    label {
+      font-size: 12px;
+      font-weight: 500;
+      color: #cbd5e1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    input[type="text"], input[type="number"], select {
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: #f8fafc;
+      padding: 8px 10px;
+      border-radius: 6px;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    input:focus, select:focus {
+      border-color: #38bdf8;
+    }
+
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #1e293b50;
+      padding: 10px 12px;
+      border-radius: 6px;
+      border: 1px solid #334155;
+      cursor: pointer;
+    }
+
+    .checkbox-group input {
+      width: 16px;
+      height: 16px;
+      accent-color: #38bdf8;
+      cursor: pointer;
+    }
+
+    .checkbox-label-wrap {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .checkbox-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #f8fafc;
+    }
+
+    .checkbox-desc {
+      font-size: 10px;
+      color: #94a3b8;
+    }
+
+    .estimate-card {
+      background: linear-gradient(145deg, #1e293b, #0f172a);
+      border: 1px solid #3b82f640;
+      border-radius: 8px;
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .estimate-label {
+      font-size: 12px;
+      color: #94a3b8;
+    }
+
+    .estimate-val {
+      font-size: 16px;
+      font-weight: 700;
+      color: #38bdf8;
+    }
+
+    .btn-convert {
+      background: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: background 0.2s;
+    }
+
+    .btn-convert:hover:not(:disabled) {
+      background: #1d4ed8;
+    }
+
+    .btn-convert:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .preview-pane {
+      display: flex;
+      flex-direction: column;
+      background: #090d16;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .preview-header {
+      padding: 12px 20px;
+      border-bottom: 1px solid #1e293b;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #0f172a;
+    }
+
+    .preview-body {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-image: 
+        linear-gradient(45deg, #131b2e 25%, transparent 25%), 
+        linear-gradient(-45deg, #131b2e 25%, transparent 25%), 
+        linear-gradient(45deg, transparent 75%, #131b2e 75%), 
+        linear-gradient(-45deg, transparent 75%, #131b2e 75%);
+      background-size: 20px 20px;
+      background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+      padding: 20px;
+      overflow: auto;
+    }
+
+    .preview-empty {
+      color: #475569;
+      text-align: center;
+      font-size: 14px;
+    }
+
+    .gif-preview-img {
+      box-shadow: 0 20px 30px -10px rgba(0, 0, 0, 0.7);
+      border: 1px solid #334155;
+      background: white;
+      max-width: 100%;
+      max-height: 100%;
+    }
+
+    .btn-download {
+      background: #059669;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      gap: 6px;
+      text-decoration: none;
+    }
+
+    .btn-download:hover {
+      background: #047857;
+    }
+
+    .overlay {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(11, 15, 25, 0.85);
+      backdrop-filter: blur(4px);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      z-index: 100;
+    }
+
+    .progress-bar-wrap {
+      width: 260px;
+      height: 8px;
+      background: #1e293b;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .progress-bar {
+      width: 0%;
+      height: 100%;
+      background: #38bdf8;
+      transition: width 0.2s ease;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo">
+      <svg viewBox="0 0 24 24"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2m0 2v12h16V6H4m2 10 3.5-4.5 2.5 3 3.5-4.5 4.5 6H6Z"/></svg>
+      HTML Banner to GIF Studio
+    </div>
+    <div style="font-size: 12px; color: #64748b;">Variable Frame Delays • Color Quantization • Weight Estimator</div>
+  </header>
+
+  <div class="container">
+    <div class="sidebar">
+      <div>
+        <div class="section-title">Source Banner</div>
+        <input type="file" id="fileInput" accept=".zip" style="display: none;">
+        <div class="dropzone" id="dropzone">
+          <div class="dropzone-icon">📦</div>
+          <div class="dropzone-text" id="dropText">Choose HTML Banner ZIP</div>
+          <div class="dropzone-sub">Click to browse or drop .zip file</div>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-title">Dimensions & Framerate</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Width (px)</label>
+            <input type="text" id="inpWidth" value="---" readonly style="opacity: 0.85; cursor: default;">
+          </div>
+          <div class="form-group">
+            <label>Height (px)</label>
+            <input type="text" id="inpHeight" value="---" readonly style="opacity: 0.85; cursor: default;">
+          </div>
+          <div class="form-group">
+            <label>Framerate (FPS)</label>
+            <input type="number" id="inpFps" value="25" min="1" max="60">
+          </div>
+          <div class="form-group">
+            <label>Duration (sec) <span style="font-size: 10px; color: #38bdf8;">(Auto)</span></label>
+            <input type="text" id="inpDuration" value="---" readonly style="opacity: 0.85; cursor: default;">
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-title">Optimization & Static Frames</div>
+        <div class="form-group full" style="margin-bottom: 10px;">
+          <label class="checkbox-group">
+            <input type="checkbox" id="chkAllowStatic">
+            <div class="checkbox-label-wrap">
+              <span class="checkbox-title">Allow Static Frames</span>
+              <span class="checkbox-desc">Extend duration on motionless frames (Photoshop style)</span>
+            </div>
+          </label>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Final Buffer (s)</label>
+            <input type="number" id="inpFinalBuffer" value="2" min="0" max="10" step="0.5">
+          </div>
+          <div class="form-group">
+            <label>Palette Colors</label>
+            <select id="selPalette">
+              <option value="256" selected>256 Colors</option>
+              <option value="128">128 Colors</option>
+              <option value="64">64 Colors</option>
+              <option value="32">32 Colors</option>
+              <option value="16">16 Colors</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-title">Looping & Compression</div>
+        <div class="form-group full" style="margin-bottom: 10px;">
+          <label class="checkbox-group">
+            <input type="checkbox" id="chkLoopable" checked>
+            <div class="checkbox-label-wrap">
+              <span class="checkbox-title">Loop Animation</span>
+              <span class="checkbox-desc">Infinite loop (checked) or finite count</span>
+            </div>
+          </label>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group" id="groupLoopCount" style="display: none;">
+            <label>Loop Count</label>
+            <input type="number" id="inpLoopCount" value="1" min="1" max="100">
+          </div>
+          <div class="form-group">
+            <label>Compression</label>
+            <select id="selCompression">
+              <option value="none">None (Crisp)</option>
+              <option value="low">Low</option>
+              <option value="medium" selected>Medium</option>
+              <option value="high">High (Smallest)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="estimate-card">
+        <div>
+          <div class="estimate-label">Estimated GIF Weight</div>
+          <div style="font-size: 10px; color: #64748b;">Based on params & motion heuristic</div>
+        </div>
+        <div class="estimate-val" id="lblEstimatedSize">~ 0 KB</div>
+      </div>
+
+      <button class="btn-convert" id="btnConvert" disabled>
+        ⚡ Generate GIF
+      </button>
+    </div>
+
+    <!-- Preview Pane -->
+    <div class="preview-pane">
+      <div class="preview-header">
+        <div id="previewStatus" style="font-size: 13px; font-weight: 500; color: #94a3b8;">
+          No banner loaded
+        </div>
+        <a class="btn-download" id="btnDownload" download="banner.gif">
+          💾 Download GIF
+        </a>
+      </div>
+
+      <div class="preview-body">
+        <div class="preview-empty" id="emptyState">
+          Drop an HTML banner ZIP on the left to configure parameters and generate your GIF preview.
+        </div>
+        <img id="gifPreview" class="gif-preview-img" style="display: none;" />
+      </div>
+
+      <div class="overlay" id="overlay">
+        <div id="overlayText" style="font-size: 14px; font-weight: 500; color: #f8fafc;">Processing banner...</div>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar" id="progressBar"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentBannerFileName = null;
+    let eventSource = null;
+
+    const fileInput = document.getElementById('fileInput');
+    const dropzone = document.getElementById('dropzone');
+    const dropText = document.getElementById('dropText');
+    const inpWidth = document.getElementById('inpWidth');
+    const inpHeight = document.getElementById('inpHeight');
+    const inpFps = document.getElementById('inpFps');
+    const inpDuration = document.getElementById('inpDuration');
+    const chkAllowStatic = document.getElementById('chkAllowStatic');
+    const inpFinalBuffer = document.getElementById('inpFinalBuffer');
+    const selPalette = document.getElementById('selPalette');
+    const chkLoopable = document.getElementById('chkLoopable');
+    const groupLoopCount = document.getElementById('groupLoopCount');
+    const inpLoopCount = document.getElementById('inpLoopCount');
+    const selCompression = document.getElementById('selCompression');
+    const lblEstimatedSize = document.getElementById('lblEstimatedSize');
+    const btnConvert = document.getElementById('btnConvert');
+    const btnDownload = document.getElementById('btnDownload');
+    const previewStatus = document.getElementById('previewStatus');
+    const emptyState = document.getElementById('emptyState');
+    const gifPreview = document.getElementById('gifPreview');
+    const overlay = document.getElementById('overlay');
+    const overlayText = document.getElementById('overlayText');
+    const progressBar = document.getElementById('progressBar');
+
+    // Connect SSE for live progress
+    function setupSSE() {
+      eventSource = new EventSource('/api/progress');
+      eventSource.onmessage = (e) => {
+        const data = JSON.parse(e.data);
+        overlayText.innerText = data.stage;
+        progressBar.style.width = `${data.percent}%`;
+      };
+    }
+    setupSSE();
+
+    chkLoopable.addEventListener('change', () => {
+      groupLoopCount.style.display = chkLoopable.checked ? 'none' : 'flex';
+      calculateEstimate();
+    });
+
+    [inpWidth, inpHeight, inpFps, inpDuration, chkAllowStatic, inpFinalBuffer, selPalette, selCompression].forEach(el => {
+      el.addEventListener('input', calculateEstimate);
+      el.addEventListener('change', calculateEstimate);
+    });
+
+    dropzone.addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length > 0) uploadZip(e.target.files[0]);
+    });
+
+    dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropzone.classList.add('dragover');
+    });
+
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+      if (e.dataTransfer.files.length > 0) {
+        uploadZip(e.dataTransfer.files[0]);
+      }
+    });
+
+    function resetPreviewPane() {
+      generatedGifBase64 = null;
+      gifPreview.src = '';
+      gifPreview.style.display = 'none';
+      emptyState.style.display = 'block';
+      emptyState.innerText = 'Drop an HTML banner ZIP on the left to configure parameters and generate your GIF preview.';
+      btnDownload.style.display = 'none';
+      previewStatus.innerText = 'No banner loaded';
+    }
+
+    function uploadZip(file) {
+      if (!file.name.toLowerCase().endsWith('.zip')) {
+        alert('Please select a .zip file.');
+        return;
+      }
+      
+      // Clean right-side viewport immediately
+      resetPreviewPane();
+      btnConvert.disabled = true;
+      lblEstimatedSize.innerText = '~ 0 KB';
+
+      dropText.innerText = 'Analyzing ZIP...';
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const res = await fetch('/api/inspect', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              base64Zip: reader.result,
+              fileName: file.name
+            })
+          });
+          const data = await res.json();
+          if (data.success) {
+            currentBannerFileName = data.fileName;
+            dropText.innerText = data.fileName;
+            inpWidth.value = data.width;
+            inpHeight.value = data.height;
+            inpDuration.value = data.durationSec ? `${data.durationSec}` : '5';
+            btnConvert.disabled = false;
+            previewStatus.innerText = `Banner loaded: ${data.fileName} (${data.width}x${data.height}, ~${data.durationSec || 5}s)`;
+            calculateEstimate();
+          } else {
+            alert('Error inspecting banner ZIP: ' + data.error);
+            dropText.innerText = 'Choose HTML Banner ZIP';
+            inpWidth.value = '---';
+            inpHeight.value = '---';
+            inpDuration.value = '---';
+          }
+        } catch (err) {
+          alert('Failed to upload banner: ' + err.message);
+          dropText.innerText = 'Choose HTML Banner ZIP';
+          inpWidth.value = '---';
+          inpHeight.value = '---';
+          inpDuration.value = '---';
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function calculateEstimate() {
+      const w = parseInt(inpWidth.value, 10);
+      const h = parseInt(inpHeight.value, 10);
+      const fps = parseInt(inpFps.value, 10) || 25;
+      const duration = parseFloat(inpDuration.value);
+      const buffer = parseFloat(inpFinalBuffer.value) || 0;
+      const palette = parseInt(selPalette.value, 10) || 256;
+      const staticFrames = chkAllowStatic.checked;
+      const compression = selCompression.value;
+
+      if (isNaN(w) || isNaN(h) || isNaN(duration)) {
+        lblEstimatedSize.innerText = '~ 0 KB';
+        return;
+      }
+
+      const totalSec = duration + buffer;
+      const totalRawFrames = totalSec * fps;
+      const effectiveFrames = staticFrames ? Math.max(5, totalRawFrames * 0.45) : totalRawFrames;
+      const bpp = Math.log2(palette) / 8;
+
+      // Realistic GIF LZW frame & palette overhead factor:
+      // High-frequency photo/art textures + full palette blocks typically average 0.36 - 0.40 bytes/pixel per frame in LZW
+      let rawBytes = w * h * effectiveFrames * bpp * 0.38;
+
+      if (compression === 'low') rawBytes *= 0.88;
+      if (compression === 'medium') rawBytes *= 0.72;
+      if (compression === 'high') rawBytes *= 0.58;
+
+      const kb = Math.round(rawBytes / 1024);
+      if (kb > 1024) {
+        lblEstimatedSize.innerText = `~ ${(kb / 1024).toFixed(2)} MB`;
+      } else {
+        lblEstimatedSize.innerText = `~ ${kb} KB`;
+      }
+    }
+
+    btnConvert.addEventListener('click', async () => {
+      overlay.style.display = 'flex';
+      overlayText.innerText = 'Initializing capture...';
+      progressBar.style.width = '5%';
+
+      const payload = {
+        width: inpWidth.value,
+        height: inpHeight.value,
+        fps: inpFps.value,
+        durationSec: inpDuration.value,
+        finalBufferSec: inpFinalBuffer.value,
+        allowStaticFrames: chkAllowStatic.checked,
+        loopable: chkLoopable.checked,
+        loopCount: inpLoopCount.value,
+        paletteSize: selPalette.value,
+        compression: selCompression.value
+      };
+
+      try {
+        const res = await fetch('/api/convert', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const result = await res.json();
+        overlay.style.display = 'none';
+
+        if (result.success) {
+          gifPreview.src = result.gifBase64;
+          gifPreview.style.display = 'block';
+          emptyState.style.display = 'none';
+          btnDownload.href = result.gifBase64;
+          btnDownload.download = (currentBannerFileName || 'banner.zip').replace('.zip', '.gif');
+          btnDownload.style.display = 'flex';
+
+          const sizeKb = (result.byteLength / 1024).toFixed(1);
+          previewStatus.innerText = `Rendered GIF: ${sizeKb} KB • ${result.frameCount} frames ${result.savedFrames > 0 ? `(${result.savedFrames} static frames merged)` : ''}`;
+        } else {
+          alert('Conversion failed: ' + result.error);
+        }
+      } catch (err) {
+        overlay.style.display = 'none';
+        alert('Server error during conversion: ' + err.message);
+      }
+    });
+  </script>
+</body>
+</html>
