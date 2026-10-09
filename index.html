@@ -6,8 +6,9 @@
   <title>HTML Banner Ad to GIF Studio</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   
-  <!-- Client-side libraries for 100% in-browser processing -->
+  <!-- Client-side libraries -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gifshot/0.3.2/gifshot.min.js"></script>
 
   <style>
@@ -270,6 +271,7 @@
       background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
       padding: 20px;
       overflow: auto;
+      position: relative;
     }
 
     .preview-empty {
@@ -333,12 +335,14 @@
       transition: width 0.2s ease;
     }
 
-    /* Hidden capture container */
-    #captureContainer {
+    /* Live render iframe in viewport */
+    #renderStage {
       position: absolute;
-      left: -9999px;
-      top: -9999px;
-      visibility: hidden;
+      top: 0;
+      left: 0;
+      opacity: 0;
+      pointer-events: none;
+      z-index: -10;
     }
   </style>
 </head>
@@ -349,7 +353,7 @@
       <svg viewBox="0 0 24 24"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2m0 2v12h16V6H4m2 10 3.5-4.5 2.5 3 3.5-4.5 4.5 6H6Z"/></svg>
       HTML Banner to GIF Studio
     </div>
-    <div style="font-size: 12px; color: #64748b;">100% In-Browser • Zero-Server • Cloudflare Ready</div>
+    <div style="font-size: 12px; color: #64748b;">100% In-Browser • Zero-Server • High-Fidelity Capture</div>
   </header>
 
   <div class="container">
@@ -474,6 +478,7 @@
           Drop an HTML banner ZIP on the left to configure parameters and generate your GIF preview.
         </div>
         <img id="gifPreview" class="gif-preview-img" style="display: none;" />
+        <div id="renderStage"></div>
       </div>
 
       <div class="overlay" id="overlay">
@@ -484,8 +489,6 @@
       </div>
     </div>
   </div>
-
-  <div id="captureContainer"></div>
 
   <script>
     let currentBannerFileName = null;
@@ -515,7 +518,7 @@
     const overlay = document.getElementById('overlay');
     const overlayText = document.getElementById('overlayText');
     const progressBar = document.getElementById('progressBar');
-    const captureContainer = document.getElementById('captureContainer');
+    const renderStage = document.getElementById('renderStage');
 
     chkLoopable.addEventListener('change', () => {
       groupLoopCount.style.display = chkLoopable.checked ? 'none' : 'flex';
@@ -572,9 +575,8 @@
         const zip = await JSZip.loadAsync(file);
         extractedAssets = {};
         let mainHtmlContent = null;
-        let mainHtmlFileName = null;
 
-        // Extract all files into in-memory Object URLs / data URLs
+        // Convert all assets into Data URLs so they can render anywhere without CORS restrictions
         for (const [relativePath, zipEntry] of Object.entries(zip.files)) {
           if (zipEntry.dir) continue;
           const lowerName = relativePath.toLowerCase();
@@ -582,15 +584,20 @@
           if (lowerName.endsWith('.html') || lowerName.endsWith('.htm')) {
             if (!mainHtmlContent || lowerName.endsWith('index.html')) {
               mainHtmlContent = await zipEntry.async('string');
-              mainHtmlFileName = relativePath;
             }
           } else {
-            // Asset (image, svg, js, css, etc.)
-            const blob = await zipEntry.async('blob');
-            const blobUrl = URL.createObjectURL(blob);
-            extractedAssets[relativePath] = blobUrl;
-            extractedAssets[relativePath.replace(/^\.\//, '')] = blobUrl;
-            extractedAssets[relativePath.split('/').pop()] = blobUrl; // simple filename mapping
+            const base64Data = await zipEntry.async('base64');
+            let mimeType = 'application/octet-stream';
+            if (lowerName.endsWith('.png')) mimeType = 'image/png';
+            else if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) mimeType = 'image/jpeg';
+            else if (lowerName.endsWith('.svg')) mimeType = 'image/svg+xml';
+            else if (lowerName.endsWith('.js')) mimeType = 'application/javascript';
+            else if (lowerName.endsWith('.css')) mimeType = 'text/css';
+
+            const dataUrl = `data:${mimeType};base64,${base64Data}`;
+            extractedAssets[relativePath] = dataUrl;
+            extractedAssets[relativePath.replace(/^\.\//, '')] = dataUrl;
+            extractedAssets[relativePath.split('/').pop()] = dataUrl;
           }
         }
 
@@ -598,12 +605,12 @@
           throw new Error('No HTML file found inside the ZIP archive.');
         }
 
-        // Inline relative assets into HTML using blob URLs
+        // Inline all image and asset references with their Data URLs
         let processedHtml = mainHtmlContent;
-        for (const [assetName, blobUrl] of Object.entries(extractedAssets)) {
+        for (const [assetName, dataUrl] of Object.entries(extractedAssets)) {
           const escapedName = assetName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-          processedHtml = processedHtml.replace(new RegExp(`src=["'](./)?${escapedName}["']`, 'gi'), `src="${blobUrl}"`);
-          processedHtml = processedHtml.replace(new RegExp(`url\\(["']?(./)?${escapedName}["']?\\)`, 'gi'), `url("${blobUrl}")`);
+          processedHtml = processedHtml.replace(new RegExp(`src=["'](./)?${escapedName}["']`, 'gi'), `src="${dataUrl}"`);
+          processedHtml = processedHtml.replace(new RegExp(`url\\(["']?(./)?${escapedName}["']?\\)`, 'gi'), `url("${dataUrl}")`);
         }
 
         extractedBannerHtml = processedHtml;
@@ -725,12 +732,12 @@
       }
     }
 
-    // Main In-Browser GIF Generation
+    // High-Fidelity Client-Side Frame Capture & Encoding
     btnConvert.addEventListener('click', async () => {
       if (!extractedBannerHtml) return;
 
       overlay.style.display = 'flex';
-      overlayText.innerText = 'Rendering frames in browser...';
+      overlayText.innerText = 'Preparing animation capture...';
       progressBar.style.width = '10%';
 
       const width = parseInt(inpWidth.value, 10);
@@ -739,30 +746,30 @@
       const duration = parseFloat(inpDuration.value) || 5;
       const buffer = parseFloat(inpFinalBuffer.value) || 0;
       const allowStatic = chkAllowStatic.checked;
-      const loopable = chkLoopable.checked;
-      const loopCount = loopable ? 0 : (parseInt(inpLoopCount.value, 10) || 1);
       const paletteColors = parseInt(selPalette.value, 10) || 256;
       const compression = selCompression.value;
 
       try {
-        // Create sandboxed iframe for rendering
-        captureContainer.innerHTML = '';
+        renderStage.innerHTML = '';
         const iframe = document.createElement('iframe');
         iframe.style.width = `${width}px`;
         iframe.style.height = `${height}px`;
         iframe.style.border = 'none';
-        captureContainer.appendChild(iframe);
+        iframe.style.background = '#ffffff';
+        renderStage.appendChild(iframe);
 
         const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
         iframeDoc.open();
         iframeDoc.write(extractedBannerHtml);
         iframeDoc.close();
 
-        await new Promise(r => setTimeout(r, 600)); // Allow scripts to load
+        // Wait for fonts, images, and GSAP scripts to initialize
+        await new Promise(r => setTimeout(r, 800));
 
         const iframeWin = iframe.contentWindow;
+        const targetNode = iframeWin.document.getElementById('container') || iframeWin.document.body;
 
-        // Seek clock sync
+        // Pause timeline for deterministic seek
         if (iframeWin.tl && typeof iframeWin.tl.pause === 'function') {
           iframeWin.tl.pause(0);
         } else if (iframeWin.TweenMax && typeof iframeWin.TweenMax.globalTimeScale === 'function') {
@@ -772,65 +779,44 @@
         const totalSec = duration + buffer;
         const totalFrames = Math.round(totalSec * fps);
         const frameIntervalSec = 1 / fps;
-        const capturedImages = [];
+        const capturedFrames = [];
 
-        // Canvas for frame extraction
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-
-        // Capture frame by frame
         for (let i = 0; i < totalFrames; i++) {
           const currentTimeSec = i * frameIntervalSec;
 
-          // Seek GSAP
+          // Deterministic seek
           if (iframeWin.tl && typeof iframeWin.tl.seek === 'function') {
             iframeWin.tl.seek(currentTimeSec, false);
           }
 
-          // Render iframe contents to canvas
-          ctx.clearRect(0, 0, width, height);
-          try {
-            // Use drawImage on iframe element or clone snapshot
-            ctx.drawImage(iframeWin.document.body, 0, 0, width, height);
-          } catch (e) {
-            // Fallback for cross-origin or SVG elements
-            const svgData = new XMLSerializer().serializeToString(iframeWin.document.getElementById('container') || iframeWin.document.body);
-            const img = new Image();
-            const svgBlob = new Blob([`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><foreignObject width="100%" height="100%">${svgData}</foreignObject></svg>`], { type: 'image/svg+xml;charset=utf-8' });
-            const url = URL.createObjectURL(svgBlob);
-            await new Promise(res => {
-              img.onload = () => {
-                ctx.drawImage(img, 0, 0);
-                URL.revokeObjectURL(url);
-                res();
-              };
-              img.onerror = () => res();
-              img.src = url;
-            });
-          }
+          // Accurate DOM snapshot via html2canvas
+          const canvas = await html2canvas(targetNode, {
+            width: width,
+            height: height,
+            backgroundColor: null,
+            logging: false,
+            useCORS: true,
+            allowTaint: true,
+            scale: 1
+          });
 
-          const frameDataUrl = canvas.toDataURL('image/png');
-          capturedImages.push(frameDataUrl);
+          capturedFrames.push(canvas.toDataURL('image/png'));
 
-          const pct = Math.round(10 + ((i + 1) / totalFrames) * 50);
+          const pct = Math.round(10 + ((i + 1) / totalFrames) * 55);
           overlayText.innerText = `Capturing frame ${i + 1} / ${totalFrames}...`;
           progressBar.style.width = `${pct}%`;
-          await new Promise(r => setTimeout(r, 10));
         }
 
         overlayText.innerText = 'Encoding & quantizing GIF in browser...';
         progressBar.style.width = '75%';
 
-        // Sample factor based on compression level
         let sampleInterval = 10;
         if (compression === 'low') sampleInterval = 15;
         if (compression === 'medium') sampleInterval = 20;
         if (compression === 'high') sampleInterval = 30;
 
         gifshot.createGIF({
-          images: capturedImages,
+          images: capturedFrames,
           gifWidth: width,
           gifHeight: height,
           interval: 1 / fps,
@@ -848,11 +834,10 @@
             btnDownload.download = (currentBannerFileName || 'banner.zip').replace('.zip', '.gif');
             btnDownload.style.display = 'flex';
 
-            // Calculate byte size
             const head = 'data:image/gif;base64,';
             const sizeInBytes = Math.round((base64Gif.length - head.length) * 3 / 4);
             const sizeKb = (sizeInBytes / 1024).toFixed(1);
-            previewStatus.innerText = `Rendered GIF: ${sizeKb} KB • ${capturedImages.length} frames`;
+            previewStatus.innerText = `Rendered GIF: ${sizeKb} KB • ${capturedFrames.length} frames`;
           } else {
             alert('GIF encoding error: ' + obj.errorMsg);
           }
@@ -860,7 +845,7 @@
 
       } catch (err) {
         overlay.style.display = 'none';
-        alert('Error during client-side conversion: ' + err.message);
+        alert('Error during client-side capture: ' + err.message);
       }
     });
   </script>
