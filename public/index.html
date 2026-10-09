@@ -335,14 +335,19 @@
       transition: width 0.2s ease;
     }
 
-    /* Live render iframe in viewport */
+    /* Live render iframe in visible DOM layer for proper CSS/GSAP paint calculations */
     #renderStage {
       position: absolute;
       top: 0;
       left: 0;
-      opacity: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       pointer-events: none;
-      z-index: -10;
+      opacity: 0.01; /* Must be visible to browser rasterizer */
+      z-index: 1;
     }
   </style>
 </head>
@@ -353,7 +358,7 @@
       <svg viewBox="0 0 24 24"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2m0 2v12h16V6H4m2 10 3.5-4.5 2.5 3 3.5-4.5 4.5 6H6Z"/></svg>
       HTML Banner to GIF Studio
     </div>
-    <div style="font-size: 12px; color: #64748b;">100% In-Browser • Zero-Server • High-Fidelity Capture</div>
+    <div style="font-size: 12px; color: #64748b;">100% In-Browser • Deterministic GSAP Clock Sync</div>
   </header>
 
   <div class="container">
@@ -576,7 +581,7 @@
         extractedAssets = {};
         let mainHtmlContent = null;
 
-        // Convert all assets into Data URLs so they can render anywhere without CORS restrictions
+        // Convert all assets into Data URLs
         for (const [relativePath, zipEntry] of Object.entries(zip.files)) {
           if (zipEntry.dir) continue;
           const lowerName = relativePath.toLowerCase();
@@ -605,7 +610,7 @@
           throw new Error('No HTML file found inside the ZIP archive.');
         }
 
-        // Inline all image and asset references with their Data URLs
+        // Inline all image and asset references
         let processedHtml = mainHtmlContent;
         for (const [assetName, dataUrl] of Object.entries(extractedAssets)) {
           const escapedName = assetName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
@@ -758,23 +763,33 @@
         iframe.style.background = '#ffffff';
         renderStage.appendChild(iframe);
 
-        const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-        iframeDoc.open();
-        iframeDoc.write(extractedBannerHtml);
-        iframeDoc.close();
+        // Load content via iframe srcdoc to trigger full standard browser lifecycle & GSAP load listeners
+        iframe.srcdoc = extractedBannerHtml;
 
-        // Wait for fonts, images, and GSAP scripts to initialize
-        await new Promise(r => setTimeout(r, 800));
+        // Wait for iframe load event
+        await new Promise((resolve) => {
+          iframe.onload = () => resolve();
+          setTimeout(resolve, 1200);
+        });
 
         const iframeWin = iframe.contentWindow;
-        const targetNode = iframeWin.document.getElementById('container') || iframeWin.document.body;
+        const iframeDoc = iframeWin.document;
 
-        // Pause timeline for deterministic seek
+        // Wait for images and GSAP scripts to be active
+        let retries = 0;
+        while (retries < 20 && !iframeWin.tl && !iframeWin.TweenMax) {
+          await new Promise(r => setTimeout(r, 100));
+          retries++;
+        }
+
+        // Pause timeline immediately
         if (iframeWin.tl && typeof iframeWin.tl.pause === 'function') {
           iframeWin.tl.pause(0);
         } else if (iframeWin.TweenMax && typeof iframeWin.TweenMax.globalTimeScale === 'function') {
           iframeWin.TweenMax.pauseAll();
         }
+
+        const targetNode = iframeDoc.getElementById('container') || iframeDoc.body;
 
         const totalSec = duration + buffer;
         const totalFrames = Math.round(totalSec * fps);
@@ -784,20 +799,23 @@
         for (let i = 0; i < totalFrames; i++) {
           const currentTimeSec = i * frameIntervalSec;
 
-          // Deterministic seek
+          // Step GSAP timeline clock
           if (iframeWin.tl && typeof iframeWin.tl.seek === 'function') {
             iframeWin.tl.seek(currentTimeSec, false);
           }
 
-          // Accurate DOM snapshot via html2canvas
+          // Render DOM snapshot using html2canvas directly from iframe window context
           const canvas = await html2canvas(targetNode, {
+            windowWidth: width,
+            windowHeight: height,
             width: width,
             height: height,
             backgroundColor: null,
             logging: false,
             useCORS: true,
             allowTaint: true,
-            scale: 1
+            scale: 1,
+            window: iframeWin
           });
 
           capturedFrames.push(canvas.toDataURL('image/png'));
@@ -806,6 +824,9 @@
           overlayText.innerText = `Capturing frame ${i + 1} / ${totalFrames}...`;
           progressBar.style.width = `${pct}%`;
         }
+
+        // Clean up render stage
+        renderStage.innerHTML = '';
 
         overlayText.innerText = 'Encoding & quantizing GIF in browser...';
         progressBar.style.width = '75%';
@@ -845,6 +866,7 @@
 
       } catch (err) {
         overlay.style.display = 'none';
+        renderStage.innerHTML = '';
         alert('Error during client-side capture: ' + err.message);
       }
     });
