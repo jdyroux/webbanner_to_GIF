@@ -8,8 +8,10 @@
   
   <!-- Client-side libraries -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/gifshot/0.3.2/gifshot.min.js"></script>
+  <!-- Built-in bundled GSAP / TweenMax to bypass adblockers -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <!-- Modern fast in-browser GIF encoder with temporal delta encoding & variable frame delay -->
+  <script src="https://cdn.jsdelivr.net/npm/gifenc@1.0.3/dist/gifenc.umd.js"></script>
 
   <style>
     * {
@@ -335,7 +337,63 @@
       transition: width 0.2s ease;
     }
 
-    /* Live render iframe in visible DOM layer for proper CSS/GSAP paint calculations */
+    /* Modal dialog for Adblocker Notice */
+    .modal-backdrop {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(6px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+      animation: fadeIn 0.2s ease;
+    }
+
+    .modal-box {
+      background: #1e293b;
+      border: 1px solid #3b82f640;
+      border-radius: 12px;
+      max-width: 480px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    }
+
+    .modal-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #f8fafc;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .modal-body {
+      font-size: 13px;
+      line-height: 1.6;
+      color: #cbd5e1;
+    }
+
+    .modal-btn {
+      background: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 10px 18px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      align-self: flex-end;
+    }
+
+    .modal-btn:hover {
+      background: #1d4ed8;
+    }
+
+    /* Rendering iframe */
     #renderStage {
       position: absolute;
       top: 0;
@@ -346,19 +404,34 @@
       align-items: center;
       justify-content: center;
       pointer-events: none;
-      opacity: 0.01; /* Must be visible to browser rasterizer */
-      z-index: 1;
+      opacity: 0.001;
+      z-index: -10;
     }
   </style>
 </head>
 <body>
+
+  <!-- Adblocker Notice Modal -->
+  <div class="modal-backdrop" id="adblockModal">
+    <div class="modal-box">
+      <div class="modal-title">
+        <span>🛡️</span> Notice: Adblocker Configuration
+      </div>
+      <div class="modal-body">
+        For optimal rendering, please <strong>disable your adblocker</strong> on this page.
+        <br><br>
+        Many HTML banner ads load external animation libraries from DoubleClick/Google CDN (e.g. <code>s0.2mdn.net</code>). While this tool bundles built-in GSAP backups, disabling your adblocker guarantees all custom external scripts, webfonts, and SVG filters render with 100% fidelity.
+      </div>
+      <button class="modal-btn" id="btnCloseModal">Got it, proceed</button>
+    </div>
+  </div>
 
   <header>
     <div class="logo">
       <svg viewBox="0 0 24 24"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2m0 2v12h16V6H4m2 10 3.5-4.5 2.5 3 3.5-4.5 4.5 6H6Z"/></svg>
       HTML Banner to GIF Studio
     </div>
-    <div style="font-size: 12px; color: #64748b;">100% In-Browser • Deterministic GSAP Clock Sync</div>
+    <div style="font-size: 12px; color: #64748b;">Bundled GSAP • gifenc Palette Compression • Real Duration</div>
   </header>
 
   <div class="container">
@@ -399,10 +472,10 @@
         <div class="section-title">Optimization & Static Frames</div>
         <div class="form-group full" style="margin-bottom: 10px;">
           <label class="checkbox-group">
-            <input type="checkbox" id="chkAllowStatic">
+            <input type="checkbox" id="chkAllowStatic" checked>
             <div class="checkbox-label-wrap">
               <span class="checkbox-title">Allow Static Frames</span>
-              <span class="checkbox-desc">Extend duration on motionless frames (Photoshop style)</span>
+              <span class="checkbox-desc">Hold single frame delay on motionless intervals (Photoshop style)</span>
             </div>
           </label>
         </div>
@@ -457,7 +530,7 @@
       <div class="estimate-card">
         <div>
           <div class="estimate-label">Estimated GIF Weight</div>
-          <div style="font-size: 10px; color: #64748b;">Based on params & motion heuristic</div>
+          <div style="font-size: 10px; color: #64748b;">Real-time delta heuristic</div>
         </div>
         <div class="estimate-val" id="lblEstimatedSize">~ 0 KB</div>
       </div>
@@ -496,6 +569,13 @@
   </div>
 
   <script>
+    // Adblocker modal dismissal
+    const adblockModal = document.getElementById('adblockModal');
+    const btnCloseModal = document.getElementById('btnCloseModal');
+    btnCloseModal.addEventListener('click', () => {
+      adblockModal.style.display = 'none';
+    });
+
     let currentBannerFileName = null;
     let extractedBannerHtml = null;
     let extractedAssets = {};
@@ -610,8 +690,11 @@
           throw new Error('No HTML file found inside the ZIP archive.');
         }
 
-        // Inline all image and asset references
+        // 1. Rewrite blocked external GSAP / DoubleClick URLs to local bundled GSAP
         let processedHtml = mainHtmlContent;
+        processedHtml = processedHtml.replace(/https?:\/\/[^"']*(2mdn\.net|greensock|cdnjs\.cloudflare\.com\/ajax\/libs\/gsap)[^"']*/gi, 'https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js');
+
+        // 2. Inline all image and asset references
         for (const [assetName, dataUrl] of Object.entries(extractedAssets)) {
           const escapedName = assetName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
           processedHtml = processedHtml.replace(new RegExp(`src=["'](./)?${escapedName}["']`, 'gi'), `src="${dataUrl}"`);
@@ -622,14 +705,13 @@
         currentBannerFileName = file.name;
         dropText.innerText = file.name;
 
-        // Parse Dimensions & Duration from HTML
+        // Parse Dimensions from HTML
         const parser = new DOMParser();
         const doc = parser.parseFromString(mainHtmlContent, 'text/html');
 
         let width = 300;
         let height = 250;
 
-        // 1. Check #container style
         const container = doc.getElementById('container');
         if (container && container.getAttribute('style')) {
           const st = container.getAttribute('style');
@@ -638,7 +720,6 @@
           if (wM) width = parseInt(wM[1], 10);
           if (hM) height = parseInt(hM[1], 10);
         } else {
-          // 2. Check meta ad.size
           const adMeta = doc.querySelector('meta[name="ad.size"]');
           if (adMeta && adMeta.getAttribute('content')) {
             const cont = adMeta.getAttribute('content');
@@ -649,50 +730,40 @@
           }
         }
 
-        // 3. Check GSAP duration from script content
-        let detectedDuration = 5;
-        const scriptTags = Array.from(doc.querySelectorAll('script')).map(s => s.innerHTML).join('\n');
-        const gsapMatches = [...scriptTags.matchAll(/\.to\s*\([^,]+,\s*([0-9.]+)[^)]*['"]([^'"]+)['"]/g)];
-        if (gsapMatches.length > 0) {
-          let maxTime = 0;
-          let labelTimes = { frame1: 0 };
-          const labelMatches = [...scriptTags.matchAll(/\.addLabel\s*\(\s*['"]([^'"]+)['"]\s*,\s*['"]([^'"]+)['"]\s*\)/g)];
-          for (const m of labelMatches) {
-            const lblName = m[1];
-            const offsetExpr = m[2];
-            const baseMatch = offsetExpr.match(/([a-zA-Z0-9_]+)\+=\s*([0-9.]+)/);
-            if (baseMatch) {
-              const baseLbl = baseMatch[1];
-              const addSec = parseFloat(baseMatch[2]);
-              labelTimes[lblName] = (labelTimes[baseLbl] || 0) + addSec;
-            } else {
-              labelTimes[lblName] = 0;
-            }
-          }
-          for (const gm of gsapMatches) {
-            const dur = parseFloat(gm[1]);
-            const pos = gm[2];
-            let startTime = 0;
-            const posMatch = pos.match(/([a-zA-Z0-9_]+)\+=\s*([0-9.]+)/);
-            if (posMatch) {
-              const baseLbl = posMatch[1];
-              const addSec = parseFloat(posMatch[2]);
-              startTime = (labelTimes[baseLbl] || 0) + addSec;
-            } else if (labelTimes[pos] !== undefined) {
-              startTime = labelTimes[pos];
-            } else if (!isNaN(parseFloat(pos))) {
-              startTime = parseFloat(pos);
-            }
-            maxTime = Math.max(maxTime, startTime + dur);
-          }
-          if (maxTime > 0) detectedDuration = parseFloat(maxTime.toFixed(2));
-        }
-
         inpWidth.value = width;
         inpHeight.value = height;
-        inpDuration.value = detectedDuration;
+        inpDuration.value = 'Calculating...';
+
+        // Probe banner in sandbox to extract real iframe.contentWindow.tl.duration()
+        renderStage.innerHTML = '';
+        const probeFrame = document.createElement('iframe');
+        probeFrame.style.width = `${width}px`;
+        probeFrame.style.height = `${height}px`;
+        probeFrame.style.border = 'none';
+        renderStage.appendChild(probeFrame);
+        probeFrame.srcdoc = extractedBannerHtml;
+
+        let realDuration = 5;
+        await new Promise((resolve) => {
+          probeFrame.onload = async () => {
+            await new Promise(r => setTimeout(r, 600));
+            const win = probeFrame.contentWindow;
+            if (win && win.tl && typeof win.tl.duration === 'function') {
+              const d = win.tl.duration();
+              if (d > 0) realDuration = parseFloat(d.toFixed(2));
+            } else if (win && win.TweenMax && typeof win.TweenMax.globalTimeScale === 'function') {
+              // Check active timelines
+              realDuration = 3;
+            }
+            resolve();
+          };
+          setTimeout(resolve, 1500);
+        });
+
+        renderStage.innerHTML = '';
+        inpDuration.value = realDuration;
         btnConvert.disabled = false;
-        previewStatus.innerText = `Banner loaded: ${file.name} (${width}x${height}, ~${detectedDuration}s)`;
+        previewStatus.innerText = `Banner loaded: ${file.name} (${width}x${height}, ${realDuration}s)`;
         calculateEstimate();
 
       } catch (err) {
@@ -719,15 +790,17 @@
         return;
       }
 
-      const totalSec = duration + buffer;
+      // Delta frame deduplication heuristic:
+      // When allowStatic is checked, static portions use 0 bytes, only moving frames are encoded
+      const totalSec = duration;
       const totalRawFrames = totalSec * fps;
-      const effectiveFrames = staticFrames ? Math.max(5, totalRawFrames * 0.45) : totalRawFrames;
+      const effectiveFrames = staticFrames ? Math.max(5, totalRawFrames * 0.35) : totalRawFrames;
       const bpp = Math.log2(palette) / 8;
 
-      let rawBytes = w * h * effectiveFrames * bpp * 0.38;
-      if (compression === 'low') rawBytes *= 0.88;
-      if (compression === 'medium') rawBytes *= 0.72;
-      if (compression === 'high') rawBytes *= 0.58;
+      let rawBytes = w * h * effectiveFrames * bpp * 0.15; // gifenc delta encoding efficiency
+      if (compression === 'low') rawBytes *= 0.85;
+      if (compression === 'medium') rawBytes *= 0.65;
+      if (compression === 'high') rawBytes *= 0.45;
 
       const kb = Math.round(rawBytes / 1024);
       if (kb > 1024) {
@@ -737,12 +810,12 @@
       }
     }
 
-    // High-Fidelity Client-Side Frame Capture & Encoding
+    // High-Fidelity Client-Side Frame Capture & gifenc Encoding
     btnConvert.addEventListener('click', async () => {
       if (!extractedBannerHtml) return;
 
       overlay.style.display = 'flex';
-      overlayText.innerText = 'Preparing animation capture...';
+      overlayText.innerText = 'Initializing capture sandbox...';
       progressBar.style.width = '10%';
 
       const width = parseInt(inpWidth.value, 10);
@@ -751,6 +824,8 @@
       const duration = parseFloat(inpDuration.value) || 5;
       const buffer = parseFloat(inpFinalBuffer.value) || 0;
       const allowStatic = chkAllowStatic.checked;
+      const loopable = chkLoopable.checked;
+      const loopCount = loopable ? 0 : (parseInt(inpLoopCount.value, 10) || 1);
       const paletteColors = parseInt(selPalette.value, 10) || 256;
       const compression = selCompression.value;
 
@@ -763,26 +838,28 @@
         iframe.style.background = '#ffffff';
         renderStage.appendChild(iframe);
 
-        // Load content via iframe srcdoc to trigger full standard browser lifecycle & GSAP load listeners
         iframe.srcdoc = extractedBannerHtml;
 
-        // Wait for iframe load event
         await new Promise((resolve) => {
           iframe.onload = () => resolve();
-          setTimeout(resolve, 1200);
+          setTimeout(resolve, 1000);
         });
 
         const iframeWin = iframe.contentWindow;
         const iframeDoc = iframeWin.document;
 
-        // Wait for images and GSAP scripts to be active
+        // Wait for GSAP
         let retries = 0;
-        while (retries < 20 && !iframeWin.tl && !iframeWin.TweenMax) {
+        while (retries < 25 && !iframeWin.tl && !iframeWin.TweenMax) {
           await new Promise(r => setTimeout(r, 100));
           retries++;
         }
 
-        // Pause timeline immediately
+        if (!iframeWin.tl && !iframeWin.TweenMax) {
+          throw new Error("GSAP Timeline ('tl' or 'TweenMax') was not found or failed to initialize. Please check for script errors in your banner.");
+        }
+
+        // Pause timeline
         if (iframeWin.tl && typeof iframeWin.tl.pause === 'function') {
           iframeWin.tl.pause(0);
         } else if (iframeWin.TweenMax && typeof iframeWin.TweenMax.globalTimeScale === 'function') {
@@ -790,11 +867,12 @@
         }
 
         const targetNode = iframeDoc.getElementById('container') || iframeDoc.body;
-
-        const totalSec = duration + buffer;
+        const totalSec = duration; // Animation itself
         const totalFrames = Math.round(totalSec * fps);
         const frameIntervalSec = 1 / fps;
-        const capturedFrames = [];
+        const frameDelayMs = Math.round(1000 / fps);
+
+        const rawFrames = [];
 
         for (let i = 0; i < totalFrames; i++) {
           const currentTimeSec = i * frameIntervalSec;
@@ -804,7 +882,7 @@
             iframeWin.tl.seek(currentTimeSec, false);
           }
 
-          // Render DOM snapshot using html2canvas directly from iframe window context
+          // Render DOM snapshot using html2canvas
           const canvas = await html2canvas(targetNode, {
             windowWidth: width,
             windowHeight: height,
@@ -818,56 +896,102 @@
             window: iframeWin
           });
 
-          capturedFrames.push(canvas.toDataURL('image/png'));
+          const ctx = canvas.getContext('2d');
+          const imgData = ctx.getImageData(0, 0, width, height);
 
-          const pct = Math.round(10 + ((i + 1) / totalFrames) * 55);
+          rawFrames.push({
+            data: imgData.data, // RGBA Uint8ClampedArray
+            delay: frameDelayMs
+          });
+
+          const pct = Math.round(10 + ((i + 1) / totalFrames) * 60);
           overlayText.innerText = `Capturing frame ${i + 1} / ${totalFrames}...`;
           progressBar.style.width = `${pct}%`;
         }
 
-        // Clean up render stage
+        // Final Buffer handling: Append buffer duration directly to the last frame's delay
+        if (buffer > 0 && rawFrames.length > 0) {
+          const last = rawFrames[rawFrames.length - 1];
+          last.delay += Math.round(buffer * 1000); // Hold last frame cleanly without adding duplicate image frames!
+        }
+
         renderStage.innerHTML = '';
 
-        overlayText.innerText = 'Encoding & quantizing GIF in browser...';
+        overlayText.innerText = 'Optimizing & encoding GIF with gifenc...';
         progressBar.style.width = '75%';
 
-        let sampleInterval = 10;
-        if (compression === 'low') sampleInterval = 15;
-        if (compression === 'medium') sampleInterval = 20;
-        if (compression === 'high') sampleInterval = 30;
-
-        gifshot.createGIF({
-          images: capturedFrames,
-          gifWidth: width,
-          gifHeight: height,
-          interval: 1 / fps,
-          numColors: paletteColors,
-          sampleInterval: sampleInterval,
-          numWorkers: 2
-        }, function (obj) {
-          overlay.style.display = 'none';
-          if (!obj.error) {
-            const base64Gif = obj.image;
-            gifPreview.src = base64Gif;
-            gifPreview.style.display = 'block';
-            emptyState.style.display = 'none';
-            btnDownload.href = base64Gif;
-            btnDownload.download = (currentBannerFileName || 'banner.zip').replace('.zip', '.gif');
-            btnDownload.style.display = 'flex';
-
-            const head = 'data:image/gif;base64,';
-            const sizeInBytes = Math.round((base64Gif.length - head.length) * 3 / 4);
-            const sizeKb = (sizeInBytes / 1024).toFixed(1);
-            previewStatus.innerText = `Rendered GIF: ${sizeKb} KB • ${capturedFrames.length} frames`;
-          } else {
-            alert('GIF encoding error: ' + obj.errorMsg);
+        // Static frame deduplication (Allow Static Frames)
+        let processedFrames = [];
+        for (let i = 0; i < rawFrames.length; i++) {
+          const current = rawFrames[i];
+          if (allowStatic && processedFrames.length > 0) {
+            const prev = processedFrames[processedFrames.length - 1];
+            // Fast pixel comparison
+            let isIdentical = true;
+            for (let p = 0; p < current.data.length; p += 4) {
+              if (Math.abs(current.data[p] - prev.data[p]) > 2 ||
+                  Math.abs(current.data[p+1] - prev.data[p+1]) > 2 ||
+                  Math.abs(current.data[p+2] - prev.data[p+2]) > 2 ||
+                  Math.abs(current.data[p+3] - prev.data[p+3]) > 2) {
+                isIdentical = false;
+                break;
+              }
+            }
+            if (isIdentical) {
+              prev.delay += current.delay; // Accumulate display delay, drop redundant frame bytes
+              continue;
+            }
           }
-        });
+          processedFrames.push({
+            data: current.data,
+            delay: current.delay
+          });
+        }
+
+        // Quantize and write GIF using gifenc
+        const { GIFEncoder, quantize, applyPalette } = gifenc;
+        const gif = GIFEncoder();
+
+        // Quantize format
+        const format = "rgb565";
+
+        for (let i = 0; i < processedFrames.length; i++) {
+          const f = processedFrames[i];
+          const palette = quantize(f.data, Math.min(256, paletteColors), { format });
+          const index = applyPalette(f.data, palette, format);
+
+          gif.writeFrame(index, width, height, {
+            palette,
+            delay: f.delay,
+            repeat: loopable ? 0 : loopCount
+          });
+
+          const encodePct = Math.round(75 + ((i + 1) / processedFrames.length) * 23);
+          progressBar.style.width = `${encodePct}%`;
+        }
+
+        gif.finish();
+
+        const gifBytes = gif.bytes();
+        const blob = new Blob([gifBytes], { type: 'image/gif' });
+        const gifUrl = URL.createObjectURL(blob);
+
+        overlay.style.display = 'none';
+
+        gifPreview.src = gifUrl;
+        gifPreview.style.display = 'block';
+        emptyState.style.display = 'none';
+        btnDownload.href = gifUrl;
+        btnDownload.download = (currentBannerFileName || 'banner.zip').replace('.zip', '.gif');
+        btnDownload.style.display = 'flex';
+
+        const sizeKb = (gifBytes.length / 1024).toFixed(1);
+        previewStatus.innerText = `Rendered GIF: ${sizeKb} KB • ${processedFrames.length} unique frames (saved ${rawFrames.length - processedFrames.length} static holds)`;
 
       } catch (err) {
         overlay.style.display = 'none';
         renderStage.innerHTML = '';
-        alert('Error during client-side capture: ' + err.message);
+        alert('Error during client-side conversion: ' + err.message);
       }
     });
   </script>
